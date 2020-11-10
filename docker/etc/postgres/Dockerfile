@@ -1,0 +1,4 @@
+ARG POSTGRES_VERSION=latest
+FROM postgres:${POSTGRES_VERSION}
+CMD ["postgres"]
+EXPOSE 5432

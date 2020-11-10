@@ -1,0 +1,10 @@
+.idea
+.env
+logs
+/docker/logs
+/docker/.data
+source/vendor
+source/storage
+source/public/dev
+source/public/dist
+/upload
