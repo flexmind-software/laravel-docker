@@ -1,120 +1,26 @@
 ARG PHP_VERSION
-FROM php:${PHP_VERSION}-cli
+
+FROM php:${PHP_VERSION}-fpm
 
 # Set Environment Variables
 ENV DEBIAN_FRONTEND noninteractive
 
-RUN apt-get update -yqq \
-  && apt-get install -yqq \
-     # install sshd
-     openssh-server \
-     # install ping and netcat (for debugging xdebug connectivity)
-     iputils-ping netcat \
-     # fix ssh start up bug
-     # @see https://github.com/ansible/ansible-container/issues/141
-  && mkdir /var/run/sshd \
- ;
-
-# always run apt update when start and after add new source list, then clean up at end.
-RUN set -xe; \
-    apt-get update -yqq \
-    && pecl channel-update pecl.php.net \
-    && apt-get install -yqqqq apt-utils libzip-dev zip unzip wget \
-    && docker-php-ext-configure zip \
-    && docker-php-ext-install zip && php -m | grep -q 'zip'
-
-RUN set -xe; \
-    apt-get update -yqq && apt-get install -yqq \
-    curl \
-    dnsutils \
-    gdb \
-    mc \
-    git \
-    htop \
-    iputils-ping \
-    ltrace \
-    make \
-    procps \
-    strace \
-    sudo \
-    sysstat \
-    unzip \
-    vim \
-    wget \
-    apt-transport-https \
-;
-
 USER root
 
-RUN rm /etc/apt/preferences.d/no-debian-php  \
-    && apt-get -y install libxml2-dev php-soap  \
-    && docker-php-ext-install soap
+COPY shared/scripts/install_software.sh /usr/bin/install_software
+COPY shared/scripts/install_php_extensions.sh /usr/bin/install_php_extensions
+COPY shared/scripts/install_aliases.sh /usr/bin/install_aliases
 
-RUN apt-get -y install libxslt-dev
-RUN docker-php-ext-install xsl
+RUN chmod +x /usr/bin/install_software && install_software
+RUN chmod +x /usr/bin/install_php_extensions && install_php_extensions
+RUN chmod +x /usr/bin/install_aliases && install_aliases
 
-RUN docker-php-ext-install bcmath
-RUN apt-get install -yqq libgmp-dev
-RUN docker-php-ext-install gmp
-RUN docker-php-ext-install exif
-
-RUN docker-php-ext-install opcache
-COPY ./opcache.ini /usr/local/etc/php/conf.d/opcache.ini
-
-RUN apt-get install -yqq zlib1g-dev libicu-dev g++ \
-    && docker-php-ext-configure intl \
-    && docker-php-ext-install intl
-
-USER root
-RUN apt-get install -yqq jpegoptim optipng pngquant gifsicle
-
-USER root
-RUN apt-get install -yqq libmagickwand-dev imagemagick \
-    && pecl install imagick \
-    && docker-php-ext-enable imagick
-
-RUN apt-get install -y libwebp-dev libjpeg62-turbo-dev libpng-dev libxpm-dev libfreetype6-dev
-
-RUN docker-php-ext-configure gd \
-    && docker-php-ext-install gd
-
-RUN apt-get install -yqq libc-client-dev libkrb5-dev \
-    && rm -r /var/lib/apt/lists/* \
-    && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
-    && docker-php-ext-install imap
-
-RUN pecl install apcu   \
-    && pecl install apcu_bc   \
-    && docker-php-ext-enable apcu --ini-name 10-docker-php-ext-apcu.ini   \
-    && docker-php-ext-enable apc --ini-name 20-docker-php-ext-apc.ini
-
-USER root
-RUN apt-get update -yqq && apt-get install libyaml-dev -yqq \
-    && pecl install yaml  \
-    && docker-php-ext-enable yaml
-
-ARG ADDITIONAL_LOCALES
-RUN apt-get install -yqq locales   \
-    && echo '' >> /usr/share/locale/locale.alias \
-    && temp="${ADDITIONAL_LOCALES%\"}" \
-    && temp="${temp#\"}" \
-    && for i in ${temp}; do sed -i "/$i/s/^#//g" /etc/locale.gen; done \
-    && locale-gen
-
-USER root
-RUN apt-get -yqq update \
-    && apt-get -yqq install php-zmq
+COPY shared/configs/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY shared/configs/ssh/insecure_id_rsa.pub /root/insecure_id_rsa.pub
 
 #--------------------------------------------------------------------------
 # Optional Software's Installation
 #--------------------------------------------------------------------------
-
-ARG INSTALL_POSTGRESQL=false
-RUN if [ ${INSTALL_POSTGRESQL} = true ]; then \
-   apt-get install -y libpq-dev php-pgsql postgresql-client && \
-   docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
-       && docker-php-ext-install pgsql pdo_pgsql \
-;fi
 
 ARG INSTALL_MONGODB=false
 RUN if [ ${INSTALL_MONGODB} = true ]; then \
@@ -128,32 +34,39 @@ RUN if [ ${INSTALL_MYSQL} = true ]; then \
        && docker-php-ext-install mysqli \
 ;fi
 
-ARG INSTALL_GULP=false
-ARG INSTALL_BOWER=false
-ARG NPM_REGISTRY=false
-ARG NODE_VERSION=node
-ENV NODE_VERSION ${NODE_VERSION}
-ARG INSTALL_NODE=false
-ENV NVM_DIR /home/docker/.nvm
+ARG INSTALL_POSTGRESQL=false
+RUN if [ ${INSTALL_POSTGRESQL} = true ]; then \
+   apt-get install -y libpq-dev php-pgsql && \
+   docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
+       && docker-php-ext-install pgsql pdo_pgsql \
+;fi
 
+ARG INSTALL_NODE=false
 RUN if [ ${INSTALL_NODE} = true ]; then \
-    # Install nvm (A Node Version Manager)
-    mkdir -p $NVM_DIR && \
-    curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.11/install.sh | bash \
-        && . $NVM_DIR/nvm.sh \
-        && nvm install ${NODE_VERSION} \
-        && nvm use ${NODE_VERSION} \
-        && nvm alias ${NODE_VERSION} \
-        && if [ ${NPM_REGISTRY} ]; then \
-        npm config set registry ${NPM_REGISTRY} \
-        ;fi \
-        && if [ ${INSTALL_NPM_GULP} = true ]; then \
-        npm install -g gulp \
-        ;fi \
-        && if [ ${INSTALL_NPM_BOWER} = true ]; then \
-        npm install -g bower \
-        ;fi \
-        && ln -s `npm bin --global` /home/docker/.node-bin \
+   # Install NodeJS using NVM
+   curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.38.0/install.sh | bash > /dev/null && \
+   export NVM_DIR="$HOME/.nvm" > /dev/null && \
+   [ -s "$NVM_DIR/nvm.sh" ] > /dev/null && . "$NVM_DIR/nvm.sh" > /dev/null && \
+   nvm install 14 && \
+   nvm use node \
+   nvm install node-sass; \
+   npm rebuild node-sass \
+;fi
+
+ARG INSTALL_NPM=true
+RUN if [ ${INSTALL_NPM} = true ]; then \
+   apt-get -y -qq update && \
+      apt-get install -qq -y gnupg build-essential yarn npm \
+;fi
+
+ARG INSTALL_GULP=false
+RUN if [ ${INSTALL_GULP} = true ]; then \
+   npm install -g gulp  \
+;fi
+
+ARG INSTALL_BOWER=false
+RUN if [ ${INSTALL_BOWER} = true ]; then \
+   npm install -g bower  \
 ;fi
 
 ARG INSTALL_XDEBUG=false
@@ -162,11 +75,11 @@ RUN if [ ${INSTALL_XDEBUG} = true ]; then \
        && docker-php-ext-enable xdebug \
 ;fi
 
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --2
 
 RUN set -xe; php -v | head -n 1 | grep -q "PHP ${PHP_VERSION}."
 
-ARG INSTALL_WKHTMLTOPDF=true
+ARG INSTALL_WKHTMLTOPDF=false
 RUN if [ ${INSTALL_WKHTMLTOPDF} = true ]; then \
     # Install all dependencies
     apt-get install -y \
@@ -177,14 +90,28 @@ RUN if [ ${INSTALL_WKHTMLTOPDF} = true ]; then \
     libxtst6 \
     wget \
     && wget https://github.com/h4cc/wkhtmltopdf-amd64/blob/master/bin/wkhtmltopdf-amd64?raw=true -O /usr/local/bin/wkhtmltopdf \
+    && wget https://github.com/h4cc/wkhtmltoimage-amd64/blob/master/bin/wkhtmltoimage-amd64?raw=true -O /usr/local/bin/wkhtmltoimage \
     && chmod +x /usr/local/bin/wkhtmltopdf \
+    && chmod +x /usr/local/bin/wkhtmltoimage \
 ;fi
 
-USER root
 ARG INSTALL_FAKETIME=false
 RUN if [ ${INSTALL_FAKETIME} = true ]; then \
     apt-get install -y libfaketime \
 ;fi
+
+ARG INSTALL_FFMPEG=false
+RUN if [ ${INSTALL_FFMPEG} = true ]; then \
+    apt-get update -yqq && apt-get install -yqq ffmpeg \
+;fi
+
+ARG ADDITIONAL_LOCALES
+RUN apt-get install -yqq locales   \
+    && echo '' >> /usr/share/locale/locale.alias \
+    && temp="${ADDITIONAL_LOCALES%\"}" \
+    && temp="${temp#\"}" \
+    && for i in ${temp}; do sed -i "/$i/s/^#//g" /etc/locale.gen; done \
+    && locale-gen
 
 #
 #--------------------------------------------------------------------------
@@ -192,23 +119,20 @@ RUN if [ ${INSTALL_FAKETIME} = true ]; then \
 #--------------------------------------------------------------------------
 #
 
-USER root
-RUN php -d memory_limit=-1 /usr/local/bin/composer global require phpunit/phpunit --dev
+COPY shared/configs/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
-COPY ./scripts/ /tmp/scripts/
-RUN chmod +x -R /tmp/scripts/
+RUN php -d memory_limit=-1 /usr/local/bin/composer global require phpunit/phpunit --dev
+RUN php -d memory_limit=-1 /usr/local/bin/composer global require friendsofphp/php-cs-fixer --dev
+RUN php -d memory_limit=-1 /usr/local/bin/composer global require "squizlabs/php_codesniffer=*" --dev
+
+RUN apt-get update -yqq && apt-get install -yq git-flow
 
 # Clean up
 RUN apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
     && rm /var/log/lastlog /var/log/faillog
 
- # add default public key to authorized_keys
-COPY ./ssh/insecure_id_rsa.pub /root/insecure_id_rsa.pub
-RUN mkdir -p /root/.ssh \
-  && cat /root/insecure_id_rsa.pub >> /root/.ssh/authorized_keys \
-  && rm -rf /root/insecure_id_rsa.pub \
- ;
+RUN usermod -u 1000 www-data
 
 WORKDIR /var/www/html
 
@@ -217,6 +141,19 @@ WORKDIR /var/www/html
 RUN if [ ${INSTALL_FAKETIME} = true ]; then \
     echo "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1" > /etc/ld.so.preload \
 ;fi
+
+RUN export PATH="./vendor/bin:$PATH"
+
+RUN apt-get update -yqq \
+  && apt-get install -yqq \
+     # install sshd
+     openssh-server \
+     # install ping and netcat (for debugging xdebug connectivity)
+     iputils-ping netcat \
+     # fix ssh start up bug
+     # @see https://github.com/ansible/ansible-container/issues/141
+  && mkdir /var/run/sshd \
+ ;
 
 # @see https://docs.docker.com/engine/examples/running_ssh_service/
 CMD ["/usr/sbin/sshd", "-D"]

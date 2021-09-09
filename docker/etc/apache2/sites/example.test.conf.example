@@ -1,9 +1,9 @@
 <VirtualHost *:80>
-  ServerName monitor.test
+  ServerName example.test
   DocumentRoot /var/www/html/public
   Options Indexes FollowSymLinks
 
-  <Directory "/var/www/html">
+  <Directory "/var/www/html/public">
     AllowOverride All
     <IfVersion < 2.4>
       Allow from all
@@ -18,8 +18,7 @@
 <IfModule mod_ssl.c>
     <VirtualHost _default_:443>
         ServerAdmin webmaster@localhost
-        ServerName monitor.test
-        ServerAlias *.monitor.test
+        ServerName example.test
         DocumentRoot /var/www/html/public
 
         SSLEngine on
