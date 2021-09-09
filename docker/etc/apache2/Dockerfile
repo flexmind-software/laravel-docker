@@ -32,7 +32,7 @@ RUN apt-get -yqq update && apt-get -yqq install mc
 
 RUN service apache2 restart
 
-RUN a2ensite example.test && service apache2 restart
+RUN a2ensite * && service apache2 restart
 
 ENTRYPOINT ["/opt/docker/bin/entrypoint.sh"]
 
