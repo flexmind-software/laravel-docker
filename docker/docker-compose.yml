@@ -16,8 +16,6 @@ services:
       dockerfile: ./php-fpm/Dockerfile
       args:
         - 'INSTALL_NODE=${INSTALL_NODE}'
-        - 'INSTALL_GULP=${INSTALL_GULP}'
-        - 'INSTALL_BOWER=${INSTALL_BOWER}'
         - 'INSTALL_POSTGRESQL=${INSTALL_POSTGRESQL}'
         - 'INSTALL_MYSQL=${INSTALL_MYSQL}'
         - 'INSTALL_XDEBUG=${INSTALL_XDEBUG}'
@@ -27,6 +25,7 @@ services:
         - 'PHP_VERSION=${PHP_VERSION}'
         - 'PHP_UPSTREAM_PORT=${APACHE_PHP_UPSTREAM_PORT}'
         - 'PHP_UPSTREAM_CONTAINER=${APACHE_PHP_UPSTREAM_CONTAINER}'
+        - 'INSTALL_PRODUCTION=${INSTALL_PRODUCTION}'
     container_name: '${APP_NAME}_php_fpm'
     environment:
       - 'TZ=${TIMEZONE}'
@@ -54,7 +53,7 @@ services:
       - 'MYSQL_ROOT_PASSWORD=${PERCONA_ROOT_PASSWORD}'
     volumes:
       - 'percona:/var/lib/mysql'
-      - './etc/percona/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d'''
+      - './etc/percona/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d'
     ports:
       - '${PERCONA_PORT}:3306'
     networks:
